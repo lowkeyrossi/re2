@@ -4,9 +4,6 @@ on:
     branches:
       - WoA_Python
 
-permissions:
-  contents: read
-
 jobs:
   wheel-windows-arm64:
     name: Windows ARM64, Python ${{ matrix.ver }}
@@ -17,9 +14,9 @@ jobs:
       matrix:
         ver: ['3.11', '3.12']  # Only supported Python versions for ARM64
     env:
-      BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BAZEL_CPU: arm64_windows
       PLAT_NAME: win_arm64
+      # Remove BAZELISK_GITHUB_TOKEN since we're not using bazelisk
     steps:
       - uses: actions/checkout@v4.2.2
       
@@ -27,9 +24,22 @@ jobs:
       - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
         shell: bash
       
-      - uses: bazel-contrib/setup-bazel@0.15.0
-        with:
-          bazelisk-version: '1.x'
+      # Manual Bazel installation for Windows ARM64
+      - name: Install Bazel for Windows ARM64
+        run: |
+          # Download Bazel ARM64 binary
+          Invoke-WebRequest -Uri "https://github.com/bazelbuild/bazel/releases/download/8.3.1/bazel-8.3.1-windows-arm64.exe" -OutFile "bazel.exe"
+          
+          # Create bazel directory and move executable
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\bin"
+          Move-Item "bazel.exe" "$env:USERPROFILE\bin\bazel.exe"
+          
+          # Add to PATH for current session
+          echo "$env:USERPROFILE\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # Verify installation
+          & "$env:USERPROFILE\bin\bazel.exe" version
+        shell: powershell
       
       - uses: actions/setup-python@v5.6.0
         with:
@@ -72,7 +82,7 @@ jobs:
 
   publish-arm64:
     needs: wheel-windows-arm64
-    if: inputs.build >= 1
+    if: github.event.inputs.build >= 1 || github.event_name == 'push'
     permissions:
       contents: read
       # Required for PyPI publishing
@@ -100,14 +110,14 @@ jobs:
         with:
           path: python
       
-      - name: Set build number to ${{ inputs.build }}
+      - name: Set build number to ${{ github.event.inputs.build || '1' }}
         env:
           SOURCE_DATE_EPOCH: ${{ env.timestamp }}
         run: |
           mkdir -p dist
           for WHL in */google_re2-*.whl; do
             python -m wheel unpack "${WHL}"
-            python -m wheel pack --dest-dir=dist --build-number=${{ inputs.build }} google_re2-*
+            python -m wheel pack --dest-dir=dist --build-number=${{ github.event.inputs.build || '1' }} google_re2-*
             rm -rf google_re2-*
           done
         shell: bash
