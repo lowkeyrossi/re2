@@ -70,3 +70,12 @@ platform(
         "@platforms//os:windows",
     ],
 )
+
+# Add ARM64 Windows platform
+platform(
+    name = "arm64_windows",
+    constraint_values = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:windows",
+    ],
+)
