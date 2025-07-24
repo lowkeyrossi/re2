@@ -137,26 +137,28 @@ jobs:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
           retention-days: 1
-  wheel-windows-x64:
+  wheel-windows:
     name: Windows, ${{ matrix.arch.name }}, Python ${{ matrix.ver }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.arch.runs-on }}
     strategy:
       fail-fast: false
       matrix:
         arch:
-          - { name: X86, bazel-name: x64_x86, python-name: win32     }
-          - { name: X64, bazel-name: x64,     python-name: win_amd64 }
-        ver: ['3.8', '3.9', '3.10', '3.11', '3.12']
+          - { name: X86, bazel-name: x64_x86, python-name: win32     , runs-on: windows-latest}
+          - { name: X64, bazel-name: x64,     python-name: win_amd64 , runs-on: windows-latest}
+          - { name: arm64, bazel-name: arm64,     python-name: win_arm64 , runs-on: windows-11-arm}
+        ver: ['3.11', '3.12']
     env:
       BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BAZEL_CPU: ${{ matrix.arch.bazel-name }}_windows
       PLAT_NAME: ${{ matrix.arch.python-name }}
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v4.1.7
       # Stash the timestamp for the commit SHA that triggered the workflow.
       - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: bazel-contrib/setup-bazel@0.15.0
+      - uses: bazel-contrib/setup-bazel@0.8.5
+        if: matrix.arch.runs-on == 'windows-latest'
         with:
           bazelisk-version: '1.x'
       # Lowercase the architecture name for `actions/setup-python`.
@@ -164,7 +166,7 @@ jobs:
           ARCHITECTURE=${{ matrix.arch.name }}
           echo "architecture=${ARCHITECTURE,,}" >> "${GITHUB_ENV}"
         shell: bash
-      - uses: actions/setup-python@v5.6.0
+      - uses: actions/setup-python@v5.1.0
         with:
           python-version: ${{ matrix.ver }}
           architecture: ${{ env.architecture }}
@@ -193,68 +195,7 @@ jobs:
           python re2_test.py
         shell: bash
         working-directory: python
-      - uses: actions/upload-artifact@v4.6.2
-        with:
-          name: ${{ hashFiles('python/google_re2-*.whl') }}
-          path: python/google_re2-*.whl
-          retention-days: 1
-  wheel-windows-arm64:
-    name: Windows ARM64, Python ${{ matrix.ver }}
-    runs-on: windows-11-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        ver: ['3.11', '3.12']
-    env:
-      BAZEL_CPU: arm64_windows
-      PLAT_NAME: win_arm64
-    steps:
-      - uses: actions/checkout@v4.2.2
-      # Stash the timestamp for the commit SHA that triggered the workflow.
-      - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
-        shell: bash
-      - name: Install Bazel for Windows ARM64
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/bazelbuild/bazel/releases/download/8.3.1/bazel-8.3.1-windows-arm64.exe" -OutFile "bazel.exe"
-          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\bin"
-          Move-Item "bazel.exe" "$env:USERPROFILE\bin\bazel.exe"
-          echo "$env:USERPROFILE\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        shell: powershell
-      # Lowercase the architecture name for `actions/setup-python`.
-      - run: |
-          ARCHITECTURE=${{ matrix.arch.name }}
-          echo "architecture=${ARCHITECTURE,,}" >> "${GITHUB_ENV}"
-        shell: bash
-      - uses: actions/setup-python@v5.6.0
-        with:
-          python-version: ${{ matrix.ver }}
-          architecture: ${{ env.architecture }}
-      - name: Prepare Python ${{ matrix.ver }} environment
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade setuptools build wheel delvewheel
-          python -m pip install --upgrade absl-py mypy
-          python python/toolchains/generate.py
-        shell: bash
-      - name: Build wheel
-        env:
-          SOURCE_DATE_EPOCH: ${{ env.timestamp }}
-        run: |
-          python -m build --wheel
-          python -m delvewheel repair --wheel-dir=. dist/*
-        shell: bash
-        working-directory: python
-      - name: Test wheel
-        run: |
-          python -m pip install google_re2-*.whl
-          # Pivot out of the repository so that we test the wheel.
-          DIR=$(mktemp -d)
-          cp re2_test.py "${DIR}"
-          cd "${DIR}"
-          python re2_test.py
-        shell: bash
-        working-directory: python
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v4.3.3
         with:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
@@ -263,8 +204,7 @@ jobs:
     needs:
       - wheel-linux
       - wheel-macos
-      - wheel-windows-x64
-      - wheel-windows-arm64
+      - wheel-windows
     permissions:
       contents: read
       # Required for PyPI publishing.
