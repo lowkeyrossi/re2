@@ -144,10 +144,17 @@ jobs:
       fail-fast: false
       matrix:
         arch:
-          - { name: X86, bazel-name: x64_x86, python-name: win32     , runs-on: windows-latest}
-          - { name: X64, bazel-name: x64,     python-name: win_amd64 , runs-on: windows-latest}
-          - { name: arm64, bazel-name: arm64,     python-name: win_arm64 , runs-on: windows-11-arm}
-        ver: ['3.11', '3.12']
+          - { name: X86,   bazel-name: x64_x86, python-name: win32     , runs-on: windows-latest }
+          - { name: X64,   bazel-name: x64,     python-name: win_amd64 , runs-on: windows-latest }
+          - { name: arm64, bazel-name: arm64,   python-name: win_arm64 , runs-on: windows-11-arm }
+        ver: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        exclude:
+          - arch: { name: arm64, bazel-name: arm64, python-name: win_arm64, runs-on: windows-11-arm }
+            ver: '3.8'
+          - arch: { name: arm64, bazel-name: arm64, python-name: win_arm64, runs-on: windows-11-arm }
+            ver: '3.9'
+          - arch: { name: arm64, bazel-name: arm64, python-name: win_arm64, runs-on: windows-11-arm }
+            ver: '3.10'
     env:
       BAZELISK_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BAZEL_CPU: ${{ matrix.arch.bazel-name }}_windows
