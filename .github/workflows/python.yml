@@ -137,7 +137,7 @@ jobs:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
           retention-days: 1
-  wheel-windows:
+  wheel-windows-x64:
     name: Windows, ${{ matrix.arch.name }}, Python ${{ matrix.ver }}
     runs-on: windows-latest
     strategy:
@@ -198,11 +198,73 @@ jobs:
           name: ${{ hashFiles('python/google_re2-*.whl') }}
           path: python/google_re2-*.whl
           retention-days: 1
+  wheel-windows-arm64:
+    name: Windows ARM64, Python ${{ matrix.ver }}
+    runs-on: windows-11-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        ver: ['3.11', '3.12']
+    env:
+      BAZEL_CPU: arm64_windows
+      PLAT_NAME: win_arm64
+    steps:
+      - uses: actions/checkout@v4.2.2
+      # Stash the timestamp for the commit SHA that triggered the workflow.
+      - run: echo "timestamp=$(git log -1 --pretty=%ct)" >> "${GITHUB_ENV}"
+        shell: bash
+      - name: Install Bazel for Windows ARM64
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/bazelbuild/bazel/releases/download/8.3.1/bazel-8.3.1-windows-arm64.exe" -OutFile "bazel.exe"
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\bin"
+          Move-Item "bazel.exe" "$env:USERPROFILE\bin\bazel.exe"
+          echo "$env:USERPROFILE\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: powershell
+      # Lowercase the architecture name for `actions/setup-python`.
+      - run: |
+          ARCHITECTURE=${{ matrix.arch.name }}
+          echo "architecture=${ARCHITECTURE,,}" >> "${GITHUB_ENV}"
+        shell: bash
+      - uses: actions/setup-python@v5.6.0
+        with:
+          python-version: ${{ matrix.ver }}
+          architecture: ${{ env.architecture }}
+      - name: Prepare Python ${{ matrix.ver }} environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade setuptools build wheel delvewheel
+          python -m pip install --upgrade absl-py mypy
+          python python/toolchains/generate.py
+        shell: bash
+      - name: Build wheel
+        env:
+          SOURCE_DATE_EPOCH: ${{ env.timestamp }}
+        run: |
+          python -m build --wheel
+          python -m delvewheel repair --wheel-dir=. dist/*
+        shell: bash
+        working-directory: python
+      - name: Test wheel
+        run: |
+          python -m pip install google_re2-*.whl
+          # Pivot out of the repository so that we test the wheel.
+          DIR=$(mktemp -d)
+          cp re2_test.py "${DIR}"
+          cd "${DIR}"
+          python re2_test.py
+        shell: bash
+        working-directory: python
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: ${{ hashFiles('python/google_re2-*.whl') }}
+          path: python/google_re2-*.whl
+          retention-days: 1
   publish:
     needs:
       - wheel-linux
       - wheel-macos
-      - wheel-windows
+      - wheel-windows-x64
+      - wheel-windows-arm64
     permissions:
       contents: read
       # Required for PyPI publishing.
